@@ -1,0 +1,6 @@
+Solution comprises following four files
+
+1. ec2-web-create.yml (ansible playbook)
+2. inv (inventory ini file)
+3. keys.yml (variable file)
+4. index.php (php webpage)
