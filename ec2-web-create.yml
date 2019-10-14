@@ -1,0 +1,196 @@
+#change ec2 state playbook
+- hosts: localhost-py3
+  gather_facts: no
+  vars_files:
+  - keys.yml
+  vars:
+ 
+  tasks:
+    
+    - name: Create AWS key pair
+      ec2_key:
+        aws_access_key: "{{ AWS_ACCESS_KEY_ID }}"
+        aws_secret_key: "{{ AWS_SECRET_ACCESS_KEY }}"
+        ec2_region: "{{ AWS_REGION }}"
+        name: manoj@AIMHL755-HL-1
+        key_material: "{{ lookup('file', '/home/ansible/.ssh/id_rsa.pub') }}"        
+
+    - name: configure VPC security group
+      ec2_group:
+        name: "default"
+        description: "default VPC security group"
+        aws_access_key: "{{ AWS_ACCESS_KEY_ID }}"
+        aws_secret_key: "{{ AWS_SECRET_ACCESS_KEY }}"
+        ec2_region: "{{ AWS_REGION }}"
+        vpc_id: "{{ AWS_VPC }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 80
+              - 443
+              - 0-65535
+            cidr_ip: 0.0.0.0/0
+            cidr_ipv6: ::/0
+#ping ports to be corrected
+          - proto: icmp
+            ports:
+              - -1
+              - -1
+            cidr_ip: 0.0.0.0/0
+            cidr_ipv6: ::/0
+
+          - proto: all
+            group_id: "{{ AWS_VPC_SGRP }}"
+    
+    - name: Provision ec2 instance
+      ec2:
+        aws_access_key: "{{ AWS_ACCESS_KEY_ID }}"
+        aws_secret_key: "{{ AWS_SECRET_ACCESS_KEY }}"
+        ec2_region: "{{ AWS_REGION }}"
+        zone: "{{ AWS_ZONE }}"
+        instance_type: t2.micro
+        keypair: manoj@AIMHL755-HL-1
+        image: "{{ BASE_AMI }}"
+        assign_public_ip: yes
+        vpc_subnet_id: "{{ AWS_VPC_SUBNET }}"
+        wait: true
+#        count: 1
+        exact_count: 1
+        count_tag: env
+#        state: running
+        instance_tags:
+          Name: TrialProj
+          image: yes
+          env: dev_web
+      register: ec2
+
+    - name: Wait for ipconfigs & SSH to come up
+      wait_for:
+        host: "{{ item.public_dns_name }}"
+        port: 22
+        delay: 60
+        timeout: 320
+        state: started
+      loop: "{{ ec2.instances }}"
+
+
+#    - name: ansible inv host settings and ssh params
+#      add_host:
+#        hostname: "{{ item.public_ip }}"
+#        instance_type: t2.micro
+#        groupname: webgroup
+#      loop: "{{ ec2.instances }}"
+
+    - name: Find EC2 Facts
+      ec2_instance_facts:
+        aws_access_key: "{{ AWS_ACCESS_KEY_ID }}"
+        aws_secret_key: "{{ AWS_SECRET_ACCESS_KEY }}"
+        region: "{{ AWS_REGION }}"
+        filters:
+          "tag:Name": TrialProj
+      register: ec2facts
+
+#    - debug: 
+#        var=ec2facts.instances[0]
+#        msg: "{{ item.public_ip_address }}"
+#      loop: "{{ ec2facts.instances }}"
+
+#    - debug:
+#        var=ec2facts.instances[1]
+#        var=ec2facts.instances[1].public_ip_address
+#         msg: "{{ item }}"
+#        msg: "{{ ec2_info.instances[0].public_ip_address }}"
+#      loop: "{{ ec2facts.instances }}"   
+
+#following module is not reliable yet. Get public ip address fails first. Looks like logic to wait until IPs
+#are assigned is not perfect
+
+    - name: ansible inv host settings and ssh params
+      add_host:
+        hostname: "{{ item.public_ip_address }}"
+        instance_type: t2.micro
+        groupname: webgroup
+# below line is commented since it is throwing error. Syntax error to be fixed
+#        ansible_ssh_common_args: "-o 'StrictHostKeyChecking=no'"
+      loop: "{{ ec2facts.instances }}"
+
+#backup code to replace the task above in case the above code fails. Following code will not ensure
+#playbook is idempotent / singleton
+#   - name: ansible inv host settings and ssh params
+#      add_host:
+#        hostname: "{{ item.public_ip }}"
+#        instance_type: t2.micro
+#        groupname: webgroup
+#      loop: "{{ ec2.instances }}"
+
+
+
+- hosts: webgroup
+  gather_facts: no
+  remote_user: ec2-user
+  become: yes
+  handlers:
+    - name: restart http and start on reboot
+      service: 
+        name: httpd
+        state: restarted
+        enabled: yes
+      listen: "restart webserver"
+
+  tasks:
+    - name: wait for ssh
+      wait_for_connection:
+        delay: 30
+
+#    - name: collect instance metadata
+#      ec2_metadata_facts:
+ 
+    - name: install packages
+      yum:
+        name: '*'
+        update_only: true
+        state: latest
+
+      yum:
+        name:
+          - httpd
+          - php
+        state: latest
+
+    - name: create group
+      
+      group:
+        name: www
+        state: present
+
+    - name: add user to group www     
+      user: 
+        name: ec2-user
+        groups: www
+        append: yes
+        state: present
+
+    - name: manage permissions /var/www directory
+      file:
+        path: /var/www
+        group: www
+        mode: '2775'
+
+      file: 
+        path: /var/www
+        state: directory
+        recurse: yes
+        group: www
+        owner: ec2-user
+        mode: '2775'
+ 
+    - name: recursively change /var/www/ file permissions to 0664  
+     
+      command: find /var/www -type f -exec sudo chmod 0664 {} +
+
+    - name: copy index.php to server
+      copy:
+        src: /home/ansible/index.php
+        dest: /var/www/html/index.php
+      notify: "restart webserver"
+
