@@ -1,0 +1,6 @@
+AWS_VPC: vpc-16014e6c
+AWS_VPC_SGRP: sg-ec6f7abd
+AWS_REGION: us-east-1    
+AWS_VPC_SUBNET: subnet-bff0cce3
+BASE_AMI: ami-0b69ea66ff7391e80
+AWS_ZONE: us-east-1b
