@@ -2,7 +2,8 @@
 - hosts: localhost-py3
   gather_facts: no
   vars_files:
-  - keys.yml
+  - key.yml
+  - variables.yml
   vars:
  
   tasks:
