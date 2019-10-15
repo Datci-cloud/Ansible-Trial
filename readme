@@ -5,7 +5,7 @@ Solution comprises following four files
 2. inv (inventory ini file)
 3. key.yml (encrypted key file)
 4. variables.yml (variables for playbook)
-4. index.php (php webpage)
+5. index.php (php webpage)
 
 
 In this version key file is encrypted and variables separated out
