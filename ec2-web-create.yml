@@ -15,6 +15,7 @@
         ec2_region: "{{ AWS_REGION }}"
         name: manoj@AIMHL755-HL-1
         key_material: "{{ lookup('file', '/home/ansible/.ssh/id_rsa.pub') }}"        
+      no_log: true
 
     - name: configure VPC security group
       ec2_group:
@@ -42,6 +43,7 @@
 
           - proto: all
             group_id: "{{ AWS_VPC_SGRP }}"
+        no_log: true
     
     - name: Provision ec2 instance
       ec2:
@@ -90,6 +92,7 @@
         filters:
           "tag:Name": TrialProj
       register: ec2facts
+      no_log: true
 
 #    - debug: 
 #        var=ec2facts.instances[0]
